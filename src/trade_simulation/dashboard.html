@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Live BTC leveraged paper-trading experiment dashboard">
+  <title>BTC Leverage Lab</title>
+  <style>
+    :root{color-scheme:dark;--bg:#070b12;--panel:#0d1420;--panel2:#111b2a;--line:#213047;--text:#edf3fb;--muted:#7f91a9;--cyan:#59e1ff;--green:#43e2a8;--red:#ff6b7a;--gold:#ffcb6b;--radius:18px}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    button,a{font:inherit} a{color:inherit}.shell{max-width:1500px;margin:auto;padding:22px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:8px 2px 24px;border-bottom:1px solid var(--line)}
+    .brand{display:flex;align-items:center;gap:13px}.mark{width:38px;height:38px;display:grid;place-items:center;border:1px solid #315b6a;border-radius:11px;color:var(--cyan);font-weight:900;background:#0c2028}.brand h1{font-size:16px;letter-spacing:.14em;margin:0}.brand p{margin:2px 0 0;color:var(--muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+    .live{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:12px}.dot{width:8px;height:8px;border-radius:50%;background:var(--red);box-shadow:0 0 0 5px #ff6b7a18}.dot.on{background:var(--green);box-shadow:0 0 0 5px #43e2a818}
+    .hero{display:grid;grid-template-columns:1.35fr .65fr;gap:18px;margin:22px 0}.hero-main,.panel,.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}.hero-main{padding:28px;min-height:220px;position:relative;overflow:hidden}.hero-main:after{content:"";position:absolute;width:260px;height:260px;border:50px solid #59e1ff0a;border-radius:50%;right:-95px;top:-95px}
+    .eyebrow{color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase}.price{font-size:clamp(40px,7vw,76px);font-weight:750;letter-spacing:-.055em;margin:10px 0 2px;font-variant-numeric:tabular-nums}.spread{color:var(--muted);font-variant-numeric:tabular-nums}.spread b{color:var(--text);font-weight:600}.hero-meta{display:flex;gap:25px;margin-top:28px}.hero-meta div{min-width:120px}.hero-meta strong{display:block;font-size:17px;margin-top:4px}.accent{color:var(--cyan)}
+    .clock{padding:24px;display:flex;flex-direction:column;justify-content:space-between}.clock-value{font-size:30px;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin:6px 0}.progress{height:6px;background:#1a2637;border-radius:9px;overflow:hidden}.progress span{display:block;height:100%;width:0;background:var(--cyan);border-radius:inherit}.warning{border-left:2px solid var(--gold);padding-left:12px;color:var(--muted);font-size:12px;margin-top:22px}
+    .stats{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}.stat{padding:17px 18px}.stat .value{font-size:22px;font-weight:700;margin-top:5px;font-variant-numeric:tabular-nums}.stat .label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.11em}.green{color:var(--green)}.red{color:var(--red)}.gold{color:var(--gold)}
+    .tabs{display:flex;gap:4px;margin:26px 0 14px}.tab{border:0;background:transparent;color:var(--muted);padding:10px 14px;border-radius:10px;cursor:pointer}.tab.active{color:var(--text);background:var(--panel2)}.view{display:none}.view.active{display:block}.grid{display:grid;grid-template-columns:1.35fr .65fr;gap:16px}.panel{padding:20px;overflow:hidden}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:17px}.panel h2{font-size:14px;letter-spacing:.03em;margin:0}.segmented{display:flex;background:#080d15;border:1px solid var(--line);border-radius:9px;padding:3px}.segmented button{border:0;background:transparent;color:var(--muted);font-size:11px;padding:6px 9px;border-radius:6px;cursor:pointer}.segmented button.active{background:var(--panel2);color:var(--text)}
+    table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}th{text-align:left;color:var(--muted);font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:0 10px 10px}td{padding:12px 10px;border-top:1px solid #19263a;white-space:nowrap}tr:hover td{background:#111b2a88}.pill{display:inline-flex;padding:3px 7px;border:1px solid var(--line);border-radius:999px;font-size:10px}.pill.long{color:var(--green);border-color:#43e2a844}.pill.short{color:var(--red);border-color:#ff6b7a44}
+    .chart{height:260px;width:100%;display:block}.empty{display:grid;place-items:center;min-height:170px;color:var(--muted);text-align:center}.ranking{display:grid;gap:13px}.rank-row{display:grid;grid-template-columns:115px 1fr 65px;gap:10px;align-items:center;font-variant-numeric:tabular-nums}.bar{height:7px;background:#182438;border-radius:8px;overflow:hidden}.bar span{display:block;height:100%;background:var(--cyan);border-radius:inherit}.rank-row.negative .bar span{background:var(--red)}
+    .direction-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.direction-card{padding:22px;border:1px solid var(--line);background:var(--panel);border-radius:var(--radius)}.direction-card h3{margin:0 0 18px;font-size:12px;letter-spacing:.12em}.metric-row{display:flex;justify-content:space-between;padding:9px 0;border-top:1px solid #19263a;color:var(--muted)}.metric-row strong{color:var(--text);font-variant-numeric:tabular-nums}.table-wrap{overflow:auto}.exports{display:flex;gap:8px;flex-wrap:wrap}.export{padding:7px 10px;text-decoration:none;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:11px}.export:hover{color:var(--text);border-color:#49627f}.foot{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;padding:30px 2px 12px}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+    @media(max-width:1050px){.stats{grid-template-columns:repeat(3,1fr)}.hero,.grid{grid-template-columns:1fr}.direction-grid{grid-template-columns:1fr}}
+    @media(max-width:650px){.shell{padding:14px}.topbar{align-items:flex-start}.hero-main{padding:20px}.stats{grid-template-columns:repeat(2,1fr)}.hero-meta{flex-wrap:wrap}.price{font-size:44px}.tabs{overflow:auto}.panel{padding:15px}.foot{display:block}.foot span{display:block;margin-top:6px}}
+  </style>
+</head>
+<body>
+<main class="shell">
+  <header class="topbar">
+    <div class="brand"><div class="mark">₿</div><div><h1>LEVERAGE LAB</h1><p>Paper execution · BTC perpetual</p></div></div>
+    <div class="live"><span id="feedDot" class="dot"></span><span id="feedText">Connecting to Hyperliquid</span></div>
+  </header>
+
+  <section class="hero">
+    <article class="hero-main">
+      <div class="eyebrow">BTC / USD · Hyperliquid BBO</div>
+      <div id="price" class="price">—</div>
+      <div class="spread">BID <b id="bid">—</b> &nbsp; ASK <b id="ask">—</b> &nbsp; SPREAD <b id="spread">—</b></div>
+      <div class="hero-meta">
+        <div><span class="eyebrow">Experiment</span><strong id="experimentStatus" class="accent">NOT STARTED</strong></div>
+        <div><span class="eyebrow">Strategy</span><strong>Reversal v1</strong></div>
+        <div><span class="eyebrow">Funding</span><strong class="gold">NOT MODELED</strong></div>
+      </div>
+    </article>
+    <article class="clock panel">
+      <div><div class="eyebrow">Time remaining</div><div id="countdown" class="clock-value">—</div><div class="progress"><span id="progress"></span></div></div>
+      <div class="warning">This is a paper-trading experiment. No wallet, private key, or real-order path exists.</div>
+    </article>
+  </section>
+
+  <section class="stats">
+    <article class="stat"><div class="label">Signals</div><div id="signals" class="value">0</div></article>
+    <article class="stat"><div class="label">Long / Short</div><div id="directions" class="value"><span class="green">0</span> / <span class="red">0</span></div></article>
+    <article class="stat"><div class="label">Closed trades</div><div id="trades" class="value">0</div></article>
+    <article class="stat"><div class="label">Open positions</div><div id="open" class="value">0</div></article>
+    <article class="stat"><div class="label">Total fees</div><div id="fees" class="value">$0.00</div></article>
+    <article class="stat"><div class="label">Feed latency</div><div id="latency" class="value">—</div></article>
+  </section>
+
+  <nav class="tabs" aria-label="Dashboard sections">
+    <button class="tab active" data-view="overview">Overview</button>
+    <button class="tab" data-view="direction">Direction</button>
+    <button class="tab" data-view="positions">Open positions</button>
+    <button class="tab" data-view="history">Trade history</button>
+  </nav>
+
+  <section id="overview" class="view active grid">
+    <article class="panel">
+      <div class="panel-head"><h2>Account comparison</h2><div class="segmented" id="groupToggle"><button class="active" data-group="RISK_NORMALIZED">Risk normalized</button><button data-group="FIXED_MARGIN">Fixed margin</button></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Account</th><th>Equity</th><th>Return</th><th>Trades</th><th>Win rate</th><th>Net PnL</th><th>Max DD</th><th>Status</th></tr></thead><tbody id="accountsBody"></tbody></table></div>
+    </article>
+    <article class="panel">
+      <div class="panel-head"><h2>Return ranking</h2><span class="eyebrow">Current equity</span></div>
+      <div id="ranking" class="ranking"></div>
+    </article>
+    <article class="panel" style="grid-column:1/-1">
+      <div class="panel-head"><h2>Equity curves</h2><span id="curveLabel" class="eyebrow">Risk normalized</span></div>
+      <canvas id="equityChart" class="chart"></canvas>
+    </article>
+  </section>
+
+  <section id="direction" class="view"><div id="directionCards" class="direction-grid"></div></section>
+  <section id="positions" class="view panel"><div class="panel-head"><h2>Live exposure</h2><span class="eyebrow">One position maximum per account</span></div><div class="table-wrap"><table><thead><tr><th>Account</th><th>Side</th><th>Entry</th><th>Notional</th><th>Margin</th><th>TP</th><th>SL</th><th>Liquidation</th><th>Opened</th></tr></thead><tbody id="positionsBody"></tbody></table></div></section>
+  <section id="history" class="view panel"><div class="panel-head"><h2>Trade ledger</h2><div class="exports"><a class="export" href="/api/export/trades.csv">Trades CSV</a><a class="export" href="/api/export/signals.csv">Signals CSV</a><a class="export" href="/api/export/equity.csv">Equity CSV</a></div></div><div class="table-wrap"><table><thead><tr><th>Time</th><th>Account</th><th>Side</th><th>Entry</th><th>Exit</th><th>Gross</th><th>Fees</th><th>Net</th><th>Reason</th></tr></thead><tbody id="tradesBody"></tbody></table></div></section>
+
+  <footer class="foot"><span>BTC Leverage Lab · deterministic paper execution</span><span id="updated" class="mono">Waiting for data</span></footer>
+</main>
+<script>
+const $=id=>document.getElementById(id);let state=null,equity=[],group='RISK_NORMALIZED';
+const money=(v,d=2)=>v==null?'—':Number(v).toLocaleString('en-US',{style:'currency',currency:'USD',minimumFractionDigits:d,maximumFractionDigits:d});
+const pct=v=>v==null?'—':`${(Number(v)*100).toFixed(2)}%`;const num=(v,d=2)=>v==null?'—':Number(v).toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:d});
+const tone=v=>Number(v)>0?'green':Number(v)<0?'red':'';const side=v=>`<span class="pill ${v?.toLowerCase()}">${v||'—'}</span>`;
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab,.view').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.view).classList.add('active')});
+document.querySelectorAll('#groupToggle button').forEach(b=>b.onclick=()=>{group=b.dataset.group;document.querySelectorAll('#groupToggle button').forEach(x=>x.classList.toggle('active',x===b));$('curveLabel').textContent=b.textContent;renderAccounts();drawEquity()});
+function renderHeader(){const f=state.feed||{};$('feedDot').classList.toggle('on',!!f.connected);$('feedText').textContent=f.connected?'Live · Hyperliquid':'Feed disconnected';$('price').textContent=f.price?money(f.price):'—';$('bid').textContent=f.bid?money(f.bid):'—';$('ask').textContent=f.ask?money(f.ask):'—';$('spread').textContent=f.bid&&f.ask?money(f.ask-f.bid):'—';$('latency').textContent=f.age_seconds==null?'—':`${Number(f.age_seconds).toFixed(1)}s`;
+ const e=state.experiment;if(!e){$('experimentStatus').textContent='NOT STARTED';return}$('experimentStatus').textContent=e.status;const now=Date.now(),start=Date.parse(e.started_at),end=Date.parse(e.ends_at),remaining=Math.max(0,end-now),days=Math.floor(remaining/86400000),hours=Math.floor(remaining%86400000/3600000),mins=Math.floor(remaining%3600000/60000);$('countdown').textContent=e.status==='COMPLETED'?'COMPLETE':`${days}d ${hours}h ${mins}m`;$('progress').style.width=`${Math.min(100,Math.max(0,(now-start)/(end-start)*100))}%`;
+ const s=state.summary||{};$('signals').textContent=s.signals||0;$('directions').innerHTML=`<span class="green">${s.long_signals||0}</span> / <span class="red">${s.short_signals||0}</span>`;$('trades').textContent=s.closed_trades||0;$('open').textContent=s.open_positions||0;$('fees').textContent=money(s.fees||0)}
+function renderAccounts(){if(!state)return;const accounts=(state.accounts||[]).filter(a=>a.group===group);$('accountsBody').innerHTML=accounts.map(a=>`<tr><td><b>${a.leverage}×</b></td><td>${money(a.equity)}</td><td class="${tone(a.return)}">${pct(a.return)}</td><td>${a.trades}</td><td>${pct(a.win_rate)}</td><td class="${tone(a.net_pnl)}">${money(a.net_pnl)}</td><td class="red">${pct(a.max_drawdown)}</td><td><span class="pill">${a.status}</span></td></tr>`).join('')||'<tr><td colspan="8"><div class="empty">Initialize the experiment to create accounts.</div></td></tr>';
+ const max=Math.max(...accounts.map(a=>Math.abs(a.return)),.001);$('ranking').innerHTML=[...accounts].sort((a,b)=>b.return-a.return).map(a=>`<div class="rank-row ${a.return<0?'negative':''}"><b>${a.leverage}×</b><div class="bar"><span style="width:${Math.abs(a.return)/max*100}%"></span></div><span class="${tone(a.return)}">${pct(a.return)}</span></div>`).join('')||'<div class="empty">No account data yet.</div>'}
+function renderDirection(){const cards=['LONG','SHORT','COMBINED'].map(name=>{const m=state.directional?.[name]||{};return `<article class="direction-card"><h3 class="${name==='LONG'?'green':name==='SHORT'?'red':'accent'}">${name}</h3><div class="metric-row"><span>Trades</span><strong>${m.trades||0}</strong></div><div class="metric-row"><span>Win rate</span><strong>${pct(m.win_rate)}</strong></div><div class="metric-row"><span>Net PnL</span><strong class="${tone(m.net_pnl)}">${money(m.net_pnl||0)}</strong></div><div class="metric-row"><span>Expectancy</span><strong class="${tone(m.expectancy)}">${money(m.expectancy||0)}</strong></div><div class="metric-row"><span>Profit factor</span><strong>${m.profit_factor==null?'—':num(m.profit_factor)}</strong></div><div class="metric-row"><span>Fees</span><strong>${money(m.fees||0)}</strong></div><div class="metric-row"><span>Longest losing streak</span><strong>${m.longest_losing_streak||0}</strong></div></article>`}).join('');$('directionCards').innerHTML=cards}
+function renderTables(){$('positionsBody').innerHTML=(state.open_positions||[]).map(p=>`<tr><td>${p.account_name}</td><td>${side(p.direction)}</td><td>${money(p.entry_price)}</td><td>${money(p.notional,0)}</td><td>${money(p.margin,0)}</td><td class="green">${money(p.take_profit_price)}</td><td class="red">${money(p.stop_loss_price)}</td><td>${money(p.liquidation_price)}</td><td>${new Date(p.entry_timestamp).toLocaleTimeString()}</td></tr>`).join('')||'<tr><td colspan="9"><div class="empty">No open paper positions.</div></td></tr>';
+ $('tradesBody').innerHTML=(state.trades||[]).map(p=>`<tr><td>${new Date(p.entry_timestamp).toLocaleString()}</td><td>${p.account_name}</td><td>${side(p.direction)}</td><td>${money(p.entry_price)}</td><td>${money(p.exit_price)}</td><td class="${tone(p.gross_pnl)}">${money(p.gross_pnl)}</td><td>${money(Number(p.entry_fee||0)+Number(p.exit_fee||0))}</td><td class="${tone(p.net_pnl)}">${money(p.net_pnl)}</td><td>${p.exit_reason||'<span class="accent">OPEN</span>'}</td></tr>`).join('')||'<tr><td colspan="9"><div class="empty">Trades will appear after a reversal signal.</div></td></tr>'}
+function drawEquity(){const canvas=$('equityChart'),ctx=canvas.getContext('2d'),ratio=devicePixelRatio||1,w=canvas.clientWidth,h=canvas.clientHeight;canvas.width=w*ratio;canvas.height=h*ratio;ctx.scale(ratio,ratio);ctx.clearRect(0,0,w,h);const rows=(state?.equity||[]).filter(r=>r.sizing_group===group),names=[...new Set(rows.map(r=>r.account_name))];ctx.strokeStyle='#213047';ctx.lineWidth=1;for(let i=0;i<5;i++){const y=20+i*(h-45)/4;ctx.beginPath();ctx.moveTo(35,y);ctx.lineTo(w-10,y);ctx.stroke()}if(!rows.length){ctx.fillStyle='#7f91a9';ctx.textAlign='center';ctx.fillText('Equity curves begin with the first minute snapshot',w/2,h/2);return}const values=rows.map(r=>Number(r.equity)),min=Math.min(...values)*.999,max=Math.max(...values)*1.001,times=rows.map(r=>Date.parse(r.timestamp)),t0=Math.min(...times),t1=Math.max(...times, t0+1),colors=['#59e1ff','#43e2a8','#ffcb6b','#b597ff','#ff6b7a','#6fa8ff','#f18fff','#e7f0ff'];names.forEach((name,i)=>{const series=rows.filter(r=>r.account_name===name);ctx.strokeStyle=colors[i%colors.length];ctx.lineWidth=1.6;ctx.beginPath();series.forEach((r,j)=>{const x=35+(Date.parse(r.timestamp)-t0)/(t1-t0)*(w-50),y=20+(max-Number(r.equity))/(max-min)*(h-45);j?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke()})}
+async function refresh(){try{const response=await fetch('/api/dashboard',{cache:'no-store'});state=await response.json();state.equity=equity;renderHeader();renderAccounts();renderDirection();renderTables();drawEquity();$('updated').textContent=`UPDATED ${new Date().toLocaleTimeString()}`}catch(e){$('feedText').textContent='Dashboard unavailable';$('feedDot').classList.remove('on')}}
+async function refreshEquity(){try{const response=await fetch('/api/equity',{cache:'no-store'});equity=await response.json();if(state){state.equity=equity;drawEquity()}}catch(e){}}
+window.addEventListener('resize',drawEquity);refresh();refreshEquity();setInterval(refresh,2000);setInterval(refreshEquity,60000);
+</script>
+</body>
+</html>
