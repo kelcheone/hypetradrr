@@ -2,8 +2,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from unittest import TestCase
 
-from trade_simulation.market import CandleBuilder
-from trade_simulation.portfolio import Instrument
+from trade_simulation.market import CandleBuilder, LiveMarketState, MarketUpdate
+from trade_simulation.portfolio import Instrument, Quote
 
 
 class CandleBuilderTests(TestCase):
@@ -22,3 +22,20 @@ class CandleBuilderTests(TestCase):
         )
         self.assertEqual(builder.current.open, Decimal("101"))
 
+    def test_live_state_uses_trade_ranges_once_and_settles_funding_hourly(self) -> None:
+        perp = Instrument("BTC", "PERP")
+        spot = Instrument("BTC", "SPOT")
+        start = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+        state = LiveMarketState((perp, spot))
+
+        self.assertIsNone(state.apply(MarketUpdate(start, perp, quote=Quote(Decimal("99"), Decimal("101")))))
+        snapshot = state.apply(MarketUpdate(start, spot, quote=Quote(Decimal("99"), Decimal("101"))))
+        self.assertEqual(len(snapshot.quotes), 2)
+
+        trade_snapshot = state.apply(MarketUpdate(start, perp, trade_range=(Decimal("98"), Decimal("100"))))
+        self.assertEqual(trade_snapshot.trade_ranges, {perp: (Decimal("98"), Decimal("100"))})
+        self.assertEqual(state.snapshot(start).trade_ranges, {})
+
+        self.assertEqual(state.apply(MarketUpdate(start, perp, funding_rate=Decimal("0.001"))).funding, {})
+        settlement = state.apply(MarketUpdate(start + timedelta(hours=1), perp, funding_rate=Decimal("0.002")))
+        self.assertEqual(settlement.funding, {perp: Decimal("0.001")})

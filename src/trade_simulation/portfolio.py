@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from uuid import NAMESPACE_URL, uuid5
@@ -95,6 +95,7 @@ class TradeLeg:
     entry_fee: Decimal
     exit_price: Decimal | None = None
     exit_fee: Decimal = ZERO
+    funding_settled_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +115,13 @@ class Trade:
 
 
 @dataclass(frozen=True, slots=True)
+class PendingOrder:
+    intent: OrderIntent
+    submitted_at: datetime
+    expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class Portfolio:
     strategy: str
     starting_balance: Decimal
@@ -122,6 +130,9 @@ class Portfolio:
     peak_equity: Decimal
     daily_start_equity: Decimal
     status: str = "ACTIVE"
+    daily_date: date | None = None
+    last_decision_at: datetime | None = None
+    pending_order: PendingOrder | None = None
     trades: tuple[Trade, ...] = ()
 
     @classmethod
@@ -143,6 +154,27 @@ class RiskPolicy:
     max_gross: Decimal
     daily_loss: Decimal
     max_drawdown: Decimal
+
+    def refresh(self, portfolio: Portfolio, timestamp: datetime) -> Portfolio:
+        if portfolio.daily_date != timestamp.date():
+            portfolio = replace(
+                portfolio,
+                daily_date=timestamp.date(),
+                daily_start_equity=portfolio.equity,
+                status="ACTIVE" if portfolio.status == "DAILY_STOPPED" else portfolio.status,
+            )
+        drawdown = (
+            (portfolio.peak_equity - portfolio.equity) / portfolio.peak_equity
+            if portfolio.peak_equity else ZERO
+        )
+        if drawdown >= self.max_drawdown:
+            return replace(portfolio, status="DISABLED")
+        if (
+            portfolio.status != "DISABLED"
+            and portfolio.equity <= portfolio.daily_start_equity * (ONE - self.daily_loss)
+        ):
+            return replace(portfolio, status="DAILY_STOPPED")
+        return portfolio
 
     def rejection(self, portfolio: Portfolio, intent: OrderIntent) -> str | None:
         if intent.action is Action.CLOSE:
@@ -167,12 +199,27 @@ class RiskPolicy:
 class PaperBroker:
     """Simulate fills and accounting for single- and multi-leg paper trades."""
 
-    def __init__(self, *, taker_fee: Decimal, maker_fee: Decimal, slippage: Decimal) -> None:
-        if min(taker_fee, maker_fee, slippage) < ZERO:
+    def __init__(
+        self,
+        *,
+        taker_fee: Decimal,
+        maker_fee: Decimal,
+        slippage: Decimal,
+        spot_taker_fee: Decimal | None = None,
+        spot_maker_fee: Decimal | None = None,
+    ) -> None:
+        self.spot_taker_fee = taker_fee if spot_taker_fee is None else spot_taker_fee
+        self.spot_maker_fee = maker_fee if spot_maker_fee is None else spot_maker_fee
+        if min(taker_fee, maker_fee, slippage, self.spot_taker_fee, self.spot_maker_fee) < ZERO:
             raise ValueError("fees and slippage cannot be negative")
         self.taker_fee = taker_fee
         self.maker_fee = maker_fee
         self.slippage = slippage
+
+    def _fee_rate(self, instrument: Instrument, order_type: OrderType) -> Decimal:
+        if instrument.kind == "SPOT":
+            return self.spot_maker_fee if order_type is OrderType.POST_ONLY else self.spot_taker_fee
+        return self.maker_fee if order_type is OrderType.POST_ONLY else self.taker_fee
 
     def execute(
         self, portfolio: Portfolio, intent: OrderIntent, market: MarketSnapshot
@@ -203,14 +250,23 @@ class PaperBroker:
             return portfolio, ZERO
         rates = market.funding or {}
         payment = ZERO
+        funded_legs = []
         for leg in trade.legs:
-            if leg.instrument.kind != "PERP" or leg.instrument not in rates:
+            if (
+                leg.instrument.kind != "PERP"
+                or leg.instrument not in rates
+                or leg.funding_settled_at is not None
+                and market.timestamp <= leg.funding_settled_at
+            ):
+                funded_legs.append(leg)
                 continue
             quote = market.quotes[leg.instrument]
             notional = leg.quantity * (quote.bid + quote.ask) / 2
             payment -= leg.side.sign * notional * rates[leg.instrument]
+            funded_legs.append(replace(leg, funding_settled_at=market.timestamp))
         funded = replace(
             trade,
+            legs=tuple(funded_legs),
             funding=trade.funding + payment,
             net_pnl=trade.net_pnl + payment,
         )
@@ -241,11 +297,11 @@ class PaperBroker:
                 if not traded_through:
                     return portfolio, None
                 fill = requested.limit_price
-                fee_rate = self.maker_fee
+                fee_rate = self._fee_rate(requested.instrument, requested.order_type)
             else:
                 market_price = quote.ask if requested.side is Side.LONG else quote.bid
                 fill = market_price * (ONE + self.slippage * requested.side.sign)
-                fee_rate = self.taker_fee
+                fee_rate = self._fee_rate(requested.instrument, requested.order_type)
             legs.append(TradeLeg(
                 requested.instrument,
                 requested.side,
@@ -289,7 +345,7 @@ class PaperBroker:
             market_price = quote.bid if leg.side is Side.LONG else quote.ask
             fill = market_price * (ONE - self.slippage * leg.side.sign)
             gross += leg.quantity * (fill - leg.entry_price) * leg.side.sign
-            exit_fee = leg.quantity * fill * self.taker_fee
+            exit_fee = leg.quantity * fill * self._fee_rate(leg.instrument, OrderType.MARKET)
             exit_fees += exit_fee
             closed_legs.append(replace(leg, exit_price=fill, exit_fee=exit_fee))
         fees = open_trade.fees + exit_fees

@@ -28,6 +28,10 @@ _Avoid_: Trade, position
 A strategy's deterministic request to open or close one or more trade legs; it is not an exchange order.
 _Avoid_: Signal, real order
 
+**Pending Order**:
+An accepted post-only order intent waiting for a conservative simulated fill before its expiry.
+_Avoid_: Open trade, live order
+
 **Fill**:
 A simulated execution of an order intent under the experiment's frozen spread, slippage, and fee rules.
 _Avoid_: Order, signal

@@ -44,7 +44,10 @@ class PaperBrokerTests(TestCase):
         now = datetime(2026, 1, 1, tzinfo=timezone.utc)
         spot = Instrument("BTC", "SPOT")
         perp = Instrument("BTC", "PERP")
-        broker = PaperBroker(taker_fee=Decimal("0.01"), maker_fee=Decimal("0"), slippage=Decimal("0"))
+        broker = PaperBroker(
+            taker_fee=Decimal("0.01"), maker_fee=Decimal("0"), slippage=Decimal("0"),
+            spot_taker_fee=Decimal("0.02"),
+        )
         portfolio = Portfolio.create("funding-carry", Decimal("10000"))
         portfolio, _ = broker.execute(
             portfolio,
@@ -63,12 +66,16 @@ class PaperBrokerTests(TestCase):
             perp: Quote(Decimal("110"), Decimal("110")),
         }, {perp: Decimal("0.001")})
         portfolio = broker.mark(portfolio, moved)
-        self.assertEqual(portfolio.equity, Decimal("9990"))
+        self.assertEqual(portfolio.equity, Decimal("9985"))
 
         portfolio, payment = broker.settle_funding(portfolio, moved)
         self.assertEqual(payment, Decimal("0.550"))
-        self.assertEqual(portfolio.balance, Decimal("9990.550"))
+        self.assertEqual(portfolio.balance, Decimal("9985.550"))
         self.assertEqual(portfolio.open_trade.funding, Decimal("0.550"))
+
+        replayed, duplicate = broker.settle_funding(portfolio, moved)
+        self.assertEqual(duplicate, Decimal("0"))
+        self.assertEqual(replayed.balance, portfolio.balance)
 
     def test_post_only_limit_requires_trade_through_not_touch(self) -> None:
         now = datetime(2026, 1, 1, tzinfo=timezone.utc)

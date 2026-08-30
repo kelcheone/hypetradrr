@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from unittest import TestCase
@@ -38,6 +39,9 @@ class StrategyTests(TestCase):
 
         self.assertEqual(intent.action, Action.OPEN)
         self.assertEqual(intent.legs[0].side, Side.LONG)
+
+        already_evaluated = replace(portfolio, last_decision_at=history[-1].end)
+        self.assertIsNone(TrendBreakout(btc).evaluate(replace(context, portfolio=already_evaluated)))
 
     def test_maker_reversion_posts_at_bid_after_extreme_vwap_deviation(self) -> None:
         btc = Instrument("BTC", "PERP")
@@ -116,6 +120,14 @@ class StrategyTests(TestCase):
             {("SPOT", Side.LONG), ("PERP", Side.SHORT)},
         )
         self.assertTrue(all(leg.notional == Decimal("4500.00") for leg in intent.legs))
+
+        wide_basis = replace(market, quotes={
+            spot: Quote(Decimal("100"), Decimal("100")),
+            perp: Quote(Decimal("102"), Decimal("102")),
+        })
+        self.assertIsNone(strategy.evaluate(StrategyContext(
+            wide_basis, {}, portfolio, {perp: (Decimal("0.0002"),) * 8},
+        )))
 
     def test_benchmarks_are_cash_or_one_time_spot_exposure(self) -> None:
         spot = Instrument("BTC", "SPOT")

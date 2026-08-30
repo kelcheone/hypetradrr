@@ -36,9 +36,14 @@ class Strategy(Protocol):
     def evaluate(self, context: StrategyContext) -> OrderIntent | None: ...
 
 
+def _fresh_bar(portfolio: Portfolio, candle: Candle) -> bool:
+    return portfolio.last_decision_at is None or candle.end > portfolio.last_decision_at
+
+
 @dataclass(frozen=True, slots=True)
 class CashBenchmark:
     key: str = "cash-benchmark"
+    risk_managed: bool = False
 
     def evaluate(self, context: StrategyContext) -> OrderIntent | None:
         return None
@@ -48,6 +53,7 @@ class CashBenchmark:
 class BuyAndHold:
     instrument: Instrument
     key: str = "btc-benchmark"
+    risk_managed: bool = False
 
     def evaluate(self, context: StrategyContext) -> OrderIntent | None:
         if context.portfolio.trades:
@@ -88,6 +94,8 @@ class TrendBreakout:
             return None
         if context.portfolio.open_trade:
             return self._exit(context, candles)
+        if not _fresh_bar(context.portfolio, candles[-1]):
+            return None
         current = candles[-1]
         prior = candles[-self.lookback - 1:-1]
         side = (
@@ -146,6 +154,8 @@ class VolatilityBreakout:
             return None
         if context.portfolio.open_trade:
             return self._exit(context, candles)
+        if not _fresh_bar(context.portfolio, candles[-1]):
+            return None
         current = candles[-1]
         prior = candles[-self.compression_bars - 1:-1]
         normalized_atr = []
@@ -236,6 +246,8 @@ class MakerMeanReversion:
             )
             expired = context.market.timestamp - trade.opened_at >= self.max_hold
             return OrderIntent(Action.CLOSE, reason="mean-reversion exit") if reverted or adverse or expired else None
+        if not _fresh_bar(context.portfolio, candles[-1]):
+            return None
         if abs(zscore) < self.entry_z:
             return None
         side = Side.LONG if zscore < 0 else Side.SHORT
@@ -305,6 +317,8 @@ class PairsMeanReversion:
             if abs(zscore) <= self.exit_z or abs(zscore) >= self.stop_z or expired:
                 return OrderIntent(Action.CLOSE, reason=f"pairs spread exit {zscore:.2f}z")
             return None
+        if not _fresh_bar(context.portfolio, min(btc[-1], eth[-1], key=lambda item: item.end)):
+            return None
         if abs(zscore) < self.entry_z:
             return None
         notional = context.portfolio.equity * self.leg_fraction
@@ -344,7 +358,12 @@ class FundingCarry:
             if hourly <= 0 or uneconomic or basis >= self.basis_limit:
                 return OrderIntent(Action.CLOSE, reason="funding carry exit")
             return None
-        if projected <= self.roundtrip_cost + self.safety_buffer:
+        if (
+            basis >= self.basis_limit
+            or projected <= self.roundtrip_cost + self.safety_buffer
+            or context.portfolio.last_decision_at is not None
+            and context.market.timestamp - context.portfolio.last_decision_at < timedelta(hours=1)
+        ):
             return None
         notional = context.portfolio.equity * self.allocation
         return OrderIntent(
