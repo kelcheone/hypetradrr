@@ -1,48 +1,74 @@
-# BTC Leverage Lab
+# Crypto strategy lab
 
-> **THIS APPLICATION IS A PAPER-TRADING EXPERIMENT. IT DOES NOT PLACE REAL
-> ORDERS. PAST OR SIMULATED PERFORMANCE DOES NOT INDICATE FUTURE RESULTS.
-> LEVERAGED PERPETUAL FUTURES CAN RESULT IN RAPID AND COMPLETE LOSS OF CAPITAL.**
+This service runs seven isolated paper portfolios against the same ordered
+Hyperliquid market feed. It never signs or submits an order.
 
-A seven-day BTC perpetual simulation using Hyperliquid's public BBO WebSocket.
-The same deterministic LONG and SHORT reversal signals are distributed to 16
-independent virtual accounts:
+The forward test includes:
 
-- Risk-normalized accounts at 5×, 10×, 15×, 20×, 25×, 30×, 35×, and 40×.
-- Fixed-$2,000-margin accounts at the same leverage levels.
+- cash and buy-and-hold BTC benchmarks;
+- BTC trend breakout;
+- BTC volatility breakout;
+- post-only maker mean reversion;
+- BTC and ETH pairs mean reversion;
+- spot and perpetual funding carry.
 
-There is no wallet configuration, private key handling, API signing, or order
-submission code in this repository.
+Each portfolio starts with $10,000. The paper broker models bid and ask spread,
+adverse slippage, separate spot and perpetual maker/taker fees, hourly funding,
+multi-leg fills, resting post-only orders, and forced closing at the experiment
+deadline. A daily 2% stop, 15% total drawdown stop, and 2x gross exposure cap
+pass through one shared risk gate.
 
-## What is modeled
+## Run it locally
 
-- One-second BTC bid/ask/mid samples retained for replay.
-- Symmetric five-minute dip/recovery and rally/reversal signals.
-- Taker fees, adverse slippage, isolated maintenance margin, TP, SL, liquidation,
-  cooldown, daily trade/loss limits, and total drawdown limits.
-- PostgreSQL persistence, duplicate protection, restart recovery, daily reports,
-  final exports, a read-only API, and a live dashboard.
-- Funding is deliberately disabled and every report is labelled
-  `FUNDING_NOT_MODELED`.
-
-Risk-normalized sizing includes the planned stop, two taker fees, and two
-slippage assumptions. This keeps the 5× account feasible and targets total
-loss-at-stop rather than pretending execution is free.
-
-## VM deployment
-
-Requirements: Docker Engine with the Compose plugin and outbound HTTPS/WSS
-access to `api.hyperliquid.xyz`.
+Python 3.13 and PostgreSQL are required.
 
 ```bash
-git clone <your-repository-url> trade-simulation
-cd trade-simulation
+uv sync
+cp .env.example .env
+uv run trade-simulation lab-serve
+```
+
+In another terminal, create the official run:
+
+```bash
+GIT_COMMIT=$(git rev-parse HEAD) uv run trade-simulation lab-init
+```
+
+The command prints every frozen cost, strategy, and risk setting. It creates no
+data until you type `START STRATEGY LAB` exactly.
+
+Open [http://localhost:8000](http://localhost:8000). The dashboard has strategy
+rankings, equity curves, execution and funding costs, open state, trades, and
+feed/risk events. Read-only endpoints are available at `/api/dashboard`,
+`/api/equity`, `/api/experiment`, and `/health`.
+
+Run the checks with:
+
+```bash
+uv run python -m unittest discover -s tests -v
+```
+
+## Deploy after the current v1 run
+
+Do not replace the running v1 container until its scheduled test ends. Export
+that run first:
+
+```bash
+docker compose exec app trade-simulation report --final
+docker compose cp app:/app/reports ./v1-reports
+```
+
+Then deploy this branch. The v2 tables use a `lab_` prefix, so the old database
+records can stay in PostgreSQL.
+
+```bash
+git pull
 cp .env.example .env
 ```
 
-Edit `.env` and change both occurrences of the PostgreSQL password to the same
-random value. Set `GIT_COMMIT` to the output of `git rev-parse HEAD`, then review
-every frozen experiment setting before continuing.
+Set the same strong PostgreSQL password in `POSTGRES_PASSWORD` and
+`DATABASE_URL`. Set `GIT_COMMIT` to `git rev-parse HEAD`. Review the `LAB_*`,
+fee, slippage, and duration values before building.
 
 ```bash
 docker compose build
@@ -50,60 +76,40 @@ docker compose up -d
 docker compose logs -f app
 ```
 
-The app binds to `127.0.0.1:8000`; expose it through a TLS reverse proxy such
-as Caddy rather than opening port 8000 publicly. Before starting the official
-run, verify the feed:
+Create the new run only after the health endpoint reports a connected market
+feed:
 
 ```bash
-docker compose exec app trade-simulation verify-feed
+curl http://127.0.0.1:8000/health
+docker compose exec app trade-simulation lab-init
 ```
 
-Initialize once. The command prints the immutable configuration and requires
-the exact confirmation `START EXPERIMENT`:
+The existing Caddy route is enough:
+
+```caddyfile
+trades.kelche.co {
+    reverse_proxy 127.0.0.1:8000
+}
+```
+
+Cloudflare should use Full (strict) SSL. Keep the app port bound to localhost as
+configured in `docker-compose.yml`.
+
+## Reports
+
+Download strategy, trade, equity, and event CSV files from the dashboard, or
+write a complete report bundle to the persistent Docker volume:
 
 ```bash
-docker compose exec app trade-simulation init
+docker compose exec app trade-simulation lab-report
+docker compose cp app:/app/reports ./strategy-lab-reports
 ```
 
-The already-running service detects the new experiment automatically. Check:
+The report directory contains the dashboard payload as JSON plus separate CSV
+files. One month is still a small sample. Treat the results as evidence about
+execution and strategy behavior, not proof of future profit.
 
-```bash
-curl http://localhost:8000/health
-docker compose logs -f app
-```
+## Legacy commands
 
-Do not edit configuration or code during the official run. A critical code
-change invalidates the experiment and should begin a new seven-day run.
-
-## Reports and exports
-
-The dashboard exposes CSV downloads for trades, signals, accounts, equity, and
-sampled prices. Daily JSON/Markdown reports and the final dataset are also
-written to the persistent `report-data` Docker volume.
-
-Generate a report on demand:
-
-```bash
-docker compose exec app trade-simulation report
-docker compose exec app trade-simulation report --final
-```
-
-Copy the report directory from the container if desired:
-
-```bash
-docker compose cp app:/app/reports ./reports
-```
-
-## Local development
-
-```bash
-uv sync
-cp .env.example .env
-# Change DATABASE_URL to postgresql://paper:paper@localhost:5432/paper
-uv run trade-simulation serve
-python -m unittest discover -s tests -v
-```
-
-Read-only endpoints include `/health`, `/api/dashboard`, `/api/experiment`, and
-`/api/export/{trades,signals,accounts,equity,prices}.csv`. Interactive API docs
-are available at `/docs`.
+The old implementation remains available as `serve`, `init`, `verify-feed`, and
+`report`. Docker now starts `lab-serve` by default.
